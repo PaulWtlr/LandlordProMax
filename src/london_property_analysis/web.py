@@ -46,3 +46,15 @@ def add_serve_parser(subparsers: argparse._SubParsersAction) -> None:
     serve_parser.add_argument("--host", default="127.0.0.1")
     serve_parser.add_argument("--port", default=4173, type=int)
 
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog="property-web")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", default=4173, type=int)
+    args = parser.parse_args()
+    serve(args.host, args.port)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -15,8 +15,7 @@ L'app locale couvre Chelsea et South Kensington:
 Lancer le serveur statique:
 
 ```powershell
-$env:PYTHONPATH='src'
-& 'C:\Users\paulw\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' -m london_property_analysis serve --port 4173
+& 'C:\Users\paulw\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' .\src\london_property_analysis\web.py --port 4173
 ```
 
 Puis ouvrir:

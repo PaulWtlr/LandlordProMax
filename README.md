@@ -7,8 +7,10 @@ Outil de recherche pour analyser les prix immobiliers a Londres.
 L'app locale couvre Chelsea et South Kensington:
 
 - carte interactive;
+- pins de prix zoomables jusqu'au bien individuel;
 - filtres prix, quartier, type, tenure, chambres, score;
-- liste de listings, fiche detaillee, comparables;
+- liste de listings, fiche detaillee, comparables, lien source;
+- selection de biens et ranking relatif sur le panier choisi;
 - import CSV/JSON de listings autorises;
 - export CSV des resultats filtres.
 

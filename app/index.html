@@ -50,7 +50,7 @@
             <label class="field">
               <span>Quartier</span>
               <select id="areaFilter">
-                <option value="all">Tout Londres</option>
+                <option value="all">Chelsea + South Kensington</option>
               </select>
             </label>
             <label class="field">
@@ -137,10 +137,28 @@
         <aside class="insight-panel" aria-label="Listings">
           <div class="panel-section details-section">
             <div class="section-heading">
-              <h2>Selection</h2>
+              <h2>Fiche</h2>
               <span id="selectionStatus">-</span>
             </div>
             <div id="detailPane" class="detail-pane"></div>
+          </div>
+
+          <div class="panel-section ranking-section">
+            <div class="section-heading">
+              <h2>Ranking</h2>
+              <span id="selectedCount">0 selection</span>
+            </div>
+            <div class="ranking-actions">
+              <button class="small-action" id="selectVisibleButton" type="button">
+                <i data-lucide="list-plus"></i>
+                <span>Visible</span>
+              </button>
+              <button class="small-action" id="clearSelectionButton" type="button">
+                <i data-lucide="eraser"></i>
+                <span>Clear</span>
+              </button>
+            </div>
+            <div id="rankedList" class="ranking-list"></div>
           </div>
 
           <div class="panel-section list-section">

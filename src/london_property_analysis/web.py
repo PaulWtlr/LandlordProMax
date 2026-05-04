@@ -26,7 +26,10 @@ class PropertyAppHandler(SimpleHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path in {"/", ""}:
-            self.path = "/app/index.html"
+            self.send_response(HTTPStatus.FOUND)
+            self.send_header("Location", "/app/index.html")
+            self.end_headers()
+            return
         if parsed.path == "/healthz":
             self._write_json({"status": "ok", "app": "london-property-analysis"})
             return

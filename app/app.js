@@ -18,12 +18,14 @@ let map;
 let markerLayer;
 let boundaryLayer;
 let fallbackPins;
+let markerRefs = new Map();
 let toastTimer;
 
 const state = {
   all: [],
   filtered: [],
   selectedId: null,
+  selectedIds: new Set(),
   datasetName: "Demo synthetique",
 };
 
@@ -42,14 +44,18 @@ const els = {
   targetCount: document.querySelector("#targetCount"),
   listCount: document.querySelector("#listCount"),
   selectionStatus: document.querySelector("#selectionStatus"),
+  selectedCount: document.querySelector("#selectedCount"),
   metricStrip: document.querySelector("#metricStrip"),
   listingList: document.querySelector("#listingList"),
+  rankedList: document.querySelector("#rankedList"),
   detailPane: document.querySelector("#detailPane"),
   datasetLabel: document.querySelector("#datasetLabel"),
   fileInput: document.querySelector("#fileInput"),
   importButton: document.querySelector("#importButton"),
   exportButton: document.querySelector("#exportButton"),
   resetButton: document.querySelector("#resetButton"),
+  selectVisibleButton: document.querySelector("#selectVisibleButton"),
+  clearSelectionButton: document.querySelector("#clearSelectionButton"),
   toast: document.querySelector("#toast"),
 };
 
@@ -194,6 +200,9 @@ function parseDate(value) {
 
 function normaliseArea(value) {
   const text = cleanText(value);
+  if (/chelsea\s+harbour/i.test(text)) {
+    return "Chelsea Harbour";
+  }
   if (/south\s+ken/i.test(text)) {
     return "South Kensington";
   }
@@ -264,7 +273,7 @@ function initFallbackMap() {
 }
 
 function populateDynamicOptions() {
-  populateSelect(els.areaFilter, uniqueValues(state.all, "neighbourhood"), "Tout Londres");
+  populateSelect(els.areaFilter, uniqueValues(state.all, "neighbourhood"), "Chelsea + South Kensington");
   populateSelect(els.typeFilter, uniqueValues(state.all, "propertyType"), "Tous");
   populateSelect(els.tenureFilter, uniqueValues(state.all, "tenure"), "Tous");
 }
@@ -304,6 +313,8 @@ function wireEvents() {
   els.fileInput.addEventListener("change", handleImport);
   els.exportButton.addEventListener("click", exportFilteredCsv);
   els.resetButton.addEventListener("click", resetDemo);
+  els.selectVisibleButton.addEventListener("click", selectVisibleListings);
+  els.clearSelectionButton.addEventListener("click", clearSelection);
 }
 
 function applyFilters() {
@@ -364,9 +375,10 @@ function render() {
   els.priceRangeLabel.textContent = priceRangeLabel();
 
   renderMetrics();
-  renderMarkers();
+  renderMarkers(true);
   renderList();
   renderDetails();
+  renderRanking();
 }
 
 function priceRangeLabel() {
@@ -410,7 +422,7 @@ function renderMetrics() {
     .join("");
 }
 
-function renderMarkers() {
+function renderMarkers(fitMap = true) {
   if (fallbackPins) {
     renderFallbackMarkers();
     return;
@@ -420,32 +432,89 @@ function renderMarkers() {
     return;
   }
   markerLayer.clearLayers();
+  markerRefs = new Map();
+  const positions = markerDisplayPositions(state.filtered);
 
   state.filtered.forEach((listing) => {
-    const marker = window.L.marker([listing.lat, listing.lng], {
+    const point = positions.get(listing.id) || [listing.lat, listing.lng];
+    const selected = state.selectedIds.has(listing.id);
+    const marker = window.L.marker(point, {
       icon: window.L.divIcon({
         className: "",
-        html: `<div class="listing-pin pin-${pinTone(listing)}">${escapeHtml(String(listing.score ?? "-"))}</div>`,
-        iconSize: [34, 34],
-        iconAnchor: [17, 17],
+        html: `<div class="listing-pin pin-${pinTone(listing)}${selected ? " selected" : ""}">${escapeHtml(compactPriceLabel(listing.price))}</div>`,
+        iconSize: [68, 30],
+        iconAnchor: [34, 15],
       }),
       title: listing.address,
     });
 
-    marker.on("click", () => selectListing(listing.id, true));
+    marker.on("click", () => {
+      selectListing(listing.id, false);
+      marker.openPopup();
+    });
     marker.bindPopup(`
       <div class="popup-card">
         <strong>${escapeHtml(listing.address)}</strong>
         <span>${escapeHtml(formatMaybeMoney(listing.price))} | ${escapeHtml(bedBath(listing))}</span>
+        <span>${escapeHtml(listing.neighbourhood)} | ${escapeHtml(listing.propertyType || "-")}</span>
         <span>${escapeHtml(formatMaybeMoney(pricePerSqft(listing)))} / sqft | score ${escapeHtml(String(listing.score ?? "-"))}</span>
+        <div class="popup-actions">
+          <a href="${escapeAttribute(listing.url || "#")}" target="_blank" rel="noreferrer">Source</a>
+          <button type="button" onclick="window.toggleListingSelection('${escapeAttribute(listing.id)}')">
+            ${selected ? "Retirer" : "Select"}
+          </button>
+        </div>
       </div>
     `);
     marker.addTo(markerLayer);
+    markerRefs.set(listing.id, marker);
   });
 
+  if (fitMap) {
+    fitMapToFiltered(positions);
+  }
+}
+
+function markerDisplayPositions(listings) {
+  const groups = new Map();
+  listings.forEach((listing) => {
+    const key = `${listing.lat.toFixed(5)}:${listing.lng.toFixed(5)}`;
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key).push(listing);
+  });
+
+  const positions = new Map();
+  groups.forEach((group) => {
+    if (group.length === 1) {
+      positions.set(group[0].id, [group[0].lat, group[0].lng]);
+      return;
+    }
+    const radius = Math.min(0.00024, 0.000055 + group.length * 0.000004);
+    group.forEach((listing, index) => {
+      const angle = (Math.PI * 2 * index) / group.length;
+      positions.set(listing.id, [
+        listing.lat + Math.sin(angle) * radius,
+        listing.lng + Math.cos(angle) * radius,
+      ]);
+    });
+  });
+  return positions;
+}
+
+function fitMapToFiltered(positions) {
+  if (!map) {
+    return;
+  }
+  if (state.filtered.length === 1) {
+    const only = state.filtered[0];
+    map.setView(positions.get(only.id) || [only.lat, only.lng], 18, { animate: false });
+    return;
+  }
   if (state.filtered.length) {
-    const points = state.filtered.map((listing) => [listing.lat, listing.lng]);
-    map.fitBounds(window.L.latLngBounds(points).pad(0.18), { animate: false });
+    const points = state.filtered.map((listing) => positions.get(listing.id) || [listing.lat, listing.lng]);
+    map.fitBounds(window.L.latLngBounds(points).pad(0.16), { animate: false, maxZoom: 16 });
   } else if (boundaryLayer) {
     map.fitBounds(boundaryLayer.getBounds(), { animate: false });
   }
@@ -456,15 +525,16 @@ function renderFallbackMarkers() {
     .map((listing) => {
       const point = projectPoint(listing);
       const active = listing.id === state.selectedId ? " active" : "";
+      const selected = state.selectedIds.has(listing.id) ? " selected" : "";
       return `
         <button
-          class="fallback-pin pin-${pinTone(listing)}${active}"
+          class="fallback-pin pin-${pinTone(listing)}${active}${selected}"
           type="button"
           data-id="${escapeAttribute(listing.id)}"
           style="left: ${point.x}%; top: ${point.y}%"
           aria-label="${escapeAttribute(listing.address)}"
         >
-          ${escapeHtml(String(listing.score ?? "-"))}
+          ${escapeHtml(compactPriceLabel(listing.price))}
         </button>
       `;
     })
@@ -527,8 +597,9 @@ function renderList() {
   els.listingList.innerHTML = state.filtered
     .map((listing) => {
       const active = listing.id === state.selectedId ? " active" : "";
+      const selected = state.selectedIds.has(listing.id);
       return `
-        <button class="listing-card${active}" type="button" data-id="${escapeAttribute(listing.id)}">
+        <article class="listing-card${active}${selected ? " selected" : ""}" data-id="${escapeAttribute(listing.id)}" role="button" tabindex="0">
           <div class="listing-main">
             <div class="listing-address">${escapeHtml(listing.address)}</div>
             <div class="listing-subline">${escapeHtml(listing.neighbourhood)} | ${escapeHtml(bedBath(listing))} | ${escapeHtml(listing.propertyType || "-")}</div>
@@ -538,19 +609,37 @@ function renderList() {
               <span>${escapeHtml(formatPercent(listing.grossYield))}</span>
             </div>
           </div>
-          <div class="score-pill ${scoreClass(listing.score)}">${escapeHtml(String(listing.score ?? "-"))}</div>
-        </button>
+          <div class="listing-side">
+            <div class="score-pill ${scoreClass(listing.score)}">${escapeHtml(String(listing.score ?? "-"))}</div>
+            <button class="select-toggle${selected ? " selected" : ""}" type="button" data-id="${escapeAttribute(listing.id)}">
+              ${selected ? "Retirer" : "Select"}
+            </button>
+          </div>
+        </article>
       `;
     })
     .join("");
 
   els.listingList.querySelectorAll(".listing-card").forEach((card) => {
     card.addEventListener("click", () => selectListing(card.dataset.id, true));
+    card.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        selectListing(card.dataset.id, true);
+      }
+    });
+  });
+
+  els.listingList.querySelectorAll(".select-toggle").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleListingSelection(button.dataset.id);
+    });
   });
 }
 
 function renderDetails() {
-  const selected = state.filtered.find((listing) => listing.id === state.selectedId);
+  const selected = getListingById(state.selectedId);
   els.selectionStatus.textContent = selected ? selected.source : "-";
 
   if (!selected) {
@@ -561,6 +650,7 @@ function renderDetails() {
   const badgeClass = (selected.score || 0) >= 82 ? "good" : (selected.score || 0) >= 68 ? "watch" : "";
   const sourceDate = selected.capturedAt ? DATE_FORMAT.format(selected.capturedAt) : "date inconnue";
   const comparables = getComparables(selected);
+  const inRanking = state.selectedIds.has(selected.id);
 
   els.detailPane.innerHTML = `
     <div class="detail-title">
@@ -581,9 +671,16 @@ function renderDetails() {
       ${fact("Jours marche", formatMaybeNumber(selected.daysOnMarket))}
       ${fact("Service charge", formatMaybeMoney(selected.serviceCharge))}
       ${fact("Lease", selected.leaseYears ? `${formatMaybeNumber(selected.leaseYears)} ans` : "-")}
+      ${fact("Agent", selected.agent || "-")}
+      ${fact("Statut", selected.status || "-")}
+      ${fact("Reference", selected.sourceId || "-")}
+      ${fact("Coordonnees", `${selected.lat.toFixed(5)}, ${selected.lng.toFixed(5)}`)}
     </div>
     <div class="detail-actions">
       <a href="${escapeAttribute(selected.url || "#")}" target="_blank" rel="noreferrer">Source</a>
+      <button id="detailSelectButton" type="button" class="${inRanking ? "selected" : ""}">
+        ${inRanking ? "Retirer du ranking" : "Ajouter au ranking"}
+      </button>
     </div>
     <p class="notes">${escapeHtml(selected.notes || `${selected.agent || "Agent inconnu"} | capture ${sourceDate}`)}</p>
     <div class="comparable-list">
@@ -593,6 +690,9 @@ function renderDetails() {
 
   els.detailPane.querySelectorAll(".comparable-row").forEach((row) => {
     row.addEventListener("click", () => selectListing(row.dataset.id, true));
+  });
+  els.detailPane.querySelector("#detailSelectButton")?.addEventListener("click", () => {
+    toggleListingSelection(selected.id);
   });
 }
 
@@ -631,12 +731,118 @@ function renderComparable(listing) {
 
 function selectListing(id, recenter = false) {
   state.selectedId = id;
-  const selected = state.filtered.find((listing) => listing.id === id);
+  const selected = getListingById(id);
   renderList();
   renderDetails();
+  renderRanking();
   if (recenter && selected && map) {
-    map.setView([selected.lat, selected.lng], Math.max(map.getZoom(), 16), { animate: true });
+    map.setView([selected.lat, selected.lng], Math.max(map.getZoom(), 18), { animate: true });
+    window.setTimeout(() => markerRefs.get(id)?.openPopup(), 180);
   }
+}
+
+function toggleListingSelection(id) {
+  if (!id) {
+    return;
+  }
+  if (state.selectedIds.has(id)) {
+    state.selectedIds.delete(id);
+  } else {
+    state.selectedIds.add(id);
+  }
+  renderSelectionViews();
+}
+
+function selectVisibleListings() {
+  state.filtered.forEach((listing) => state.selectedIds.add(listing.id));
+  renderSelectionViews();
+  showToast(`${state.filtered.length} listings visibles ajoutes au ranking.`);
+}
+
+function clearSelection() {
+  state.selectedIds.clear();
+  renderSelectionViews();
+  showToast("Selection ranking videe.");
+}
+
+function renderSelectionViews() {
+  renderList();
+  renderDetails();
+  renderRanking();
+  renderMarkers(false);
+}
+
+function selectedListings() {
+  return state.all.filter((listing) => state.selectedIds.has(listing.id));
+}
+
+function getListingById(id) {
+  return state.all.find((listing) => listing.id === id) || null;
+}
+
+function renderRanking() {
+  const selected = selectedListings();
+  els.selectedCount.textContent = `${selected.length} selection${selected.length > 1 ? "s" : ""}`;
+
+  if (!selected.length) {
+    els.rankedList.innerHTML = `<div class="empty-state">Selectionne des biens sur la carte ou dans la liste pour construire ton ranking.</div>`;
+    return;
+  }
+
+  const ranked = selected
+    .map((listing) => ({
+      listing,
+      rankingScore: rankingScore(listing, selected),
+    }))
+    .sort((a, b) => b.rankingScore - a.rankingScore || a.listing.price - b.listing.price);
+
+  els.rankedList.innerHTML = ranked
+    .map(({ listing, rankingScore }, index) => `
+      <button class="ranking-row${listing.id === state.selectedId ? " active" : ""}" type="button" data-id="${escapeAttribute(listing.id)}">
+        <span class="rank-badge">${index + 1}</span>
+        <span class="rank-main">
+          <strong>${escapeHtml(listing.address)}</strong>
+          <small>${escapeHtml(formatMaybeMoney(listing.price))} | ${escapeHtml(formatMaybeMoney(pricePerSqft(listing)))} / sqft | ${escapeHtml(listing.neighbourhood)}</small>
+        </span>
+        <span class="rank-score">${escapeHtml(String(rankingScore))}</span>
+      </button>
+    `)
+    .join("");
+
+  els.rankedList.querySelectorAll(".ranking-row").forEach((row) => {
+    row.addEventListener("click", () => selectListing(row.dataset.id, true));
+  });
+}
+
+function rankingScore(listing, universe) {
+  const psfValues = universe.map(pricePerSqft).filter(Number.isFinite);
+  const baselinePsf = median(psfValues);
+  const listingPsf = pricePerSqft(listing);
+  let score = 55;
+
+  if (Number.isFinite(baselinePsf) && Number.isFinite(listingPsf) && baselinePsf > 0) {
+    score += clamp(((baselinePsf - listingPsf) / baselinePsf) * 85, -30, 30);
+  } else {
+    score -= 5;
+  }
+
+  if (Number.isFinite(listing.score)) {
+    score += (listing.score - 65) * 0.35;
+  }
+  if (Number.isFinite(listing.grossYield)) {
+    score += clamp((listing.grossYield - 3) * 4, -8, 12);
+  }
+  if (!Number.isFinite(listing.sqft) || listing.sqft <= 0) {
+    score -= 4;
+  }
+  if (Number.isFinite(listing.leaseYears) && listing.leaseYears > 0 && listing.leaseYears < 85) {
+    score -= 6;
+  }
+  if (/under\s+offer|sold|reserved/i.test(listing.status || "")) {
+    score -= 8;
+  }
+
+  return Math.max(0, Math.min(100, Math.round(score)));
 }
 
 async function handleImport(event) {
@@ -738,6 +944,7 @@ function replaceListings(rows, datasetName) {
   state.all = target;
   state.datasetName = `${datasetName} | ${target.length} actifs`;
   state.selectedId = target[0]?.id ?? null;
+  state.selectedIds.clear();
   populateDynamicOptions();
   applyFilters();
   showToast(`${target.length} listings charges${rejected ? `, ${rejected} hors zone ignores` : ""}.`);
@@ -750,6 +957,7 @@ function resetDemo() {
     state.all = loaded.rows;
     state.datasetName = loaded.label;
     state.selectedId = state.all[0]?.id ?? null;
+    state.selectedIds.clear();
     populateDynamicOptions();
     applyFilters();
     showToast("Dataset Foxtons rafraichi.");
@@ -839,6 +1047,19 @@ function compactMoney(value) {
   return `GBP ${WHOLE.format(value)}`;
 }
 
+function compactPriceLabel(value) {
+  if (!Number.isFinite(value)) {
+    return "-";
+  }
+  if (Math.abs(value) >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}m`;
+  }
+  if (Math.abs(value) >= 1_000) {
+    return `${Math.round(value / 1_000)}k`;
+  }
+  return WHOLE.format(value);
+}
+
 function formatMaybeMoney(value) {
   return Number.isFinite(value) ? GBP.format(value) : "-";
 }
@@ -859,6 +1080,10 @@ function scoreClass(score) {
     return "watch";
   }
   return "rich";
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function escapeHtml(value) {
@@ -882,4 +1107,5 @@ function showToast(message) {
 }
 
 window.selectListing = selectListing;
+window.toggleListingSelection = toggleListingSelection;
 document.addEventListener("DOMContentLoaded", init);

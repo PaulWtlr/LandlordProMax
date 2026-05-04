@@ -13,6 +13,7 @@ const GBP = new Intl.NumberFormat("en-GB", {
   maximumFractionDigits: 0,
 });
 const WHOLE = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 });
+const SQFT_PER_SQM = 10.76391041671;
 
 let map;
 let markerLayer;
@@ -45,6 +46,7 @@ const els = {
   listCount: document.querySelector("#listCount"),
   selectionStatus: document.querySelector("#selectionStatus"),
   selectedCount: document.querySelector("#selectedCount"),
+  rankingFilterLabel: document.querySelector("#rankingFilterLabel"),
   metricStrip: document.querySelector("#metricStrip"),
   listingList: document.querySelector("#listingList"),
   rankedList: document.querySelector("#rankedList"),
@@ -56,6 +58,10 @@ const els = {
   resetButton: document.querySelector("#resetButton"),
   selectVisibleButton: document.querySelector("#selectVisibleButton"),
   clearSelectionButton: document.querySelector("#clearSelectionButton"),
+  rankBedroomFilter: document.querySelector("#rankBedroomFilter"),
+  rankBathroomFilter: document.querySelector("#rankBathroomFilter"),
+  rankMinPsmInput: document.querySelector("#rankMinPsmInput"),
+  rankMaxPsmInput: document.querySelector("#rankMaxPsmInput"),
   toast: document.querySelector("#toast"),
 };
 
@@ -315,6 +321,12 @@ function wireEvents() {
   els.resetButton.addEventListener("click", resetDemo);
   els.selectVisibleButton.addEventListener("click", selectVisibleListings);
   els.clearSelectionButton.addEventListener("click", clearSelection);
+  [
+    els.rankBedroomFilter,
+    els.rankBathroomFilter,
+    els.rankMinPsmInput,
+    els.rankMaxPsmInput,
+  ].forEach((input) => input.addEventListener("input", renderRanking));
 }
 
 function applyFilters() {
@@ -666,6 +678,7 @@ function renderDetails() {
     </div>
     <div class="fact-grid">
       ${fact("GBP/sqft", `${formatMaybeMoney(pricePerSqft(selected))}`)}
+      ${fact("GBP/m2", `${formatMaybeMoney(pricePerSqm(selected))}`)}
       ${fact("Surface", `${formatMaybeNumber(selected.sqft)} sqft`)}
       ${fact("Yield brut", formatPercent(selected.grossYield))}
       ${fact("Jours marche", formatMaybeNumber(selected.daysOnMarket))}
@@ -782,17 +795,26 @@ function getListingById(id) {
 
 function renderRanking() {
   const selected = selectedListings();
-  els.selectedCount.textContent = `${selected.length} selection${selected.length > 1 ? "s" : ""}`;
+  const filtered = rankingFilteredListings(selected);
+  const hasRankingFilters = rankingFilterSummary().length > 0;
+  els.selectedCount.textContent = hasRankingFilters
+    ? `${filtered.length}/${selected.length} selection${selected.length > 1 ? "s" : ""}`
+    : `${selected.length} selection${selected.length > 1 ? "s" : ""}`;
+  els.rankingFilterLabel.textContent = rankingFilterLabel(selected.length, filtered.length);
 
   if (!selected.length) {
     els.rankedList.innerHTML = `<div class="empty-state">Selectionne des biens sur la carte ou dans la liste pour construire ton ranking.</div>`;
     return;
   }
+  if (!filtered.length) {
+    els.rankedList.innerHTML = `<div class="empty-state">Aucun bien selectionne ne passe les filtres ranking.</div>`;
+    return;
+  }
 
-  const ranked = selected
+  const ranked = filtered
     .map((listing) => ({
       listing,
-      rankingScore: rankingScore(listing, selected),
+      rankingScore: rankingScore(listing, filtered),
     }))
     .sort((a, b) => b.rankingScore - a.rankingScore || a.listing.price - b.listing.price);
 
@@ -802,7 +824,7 @@ function renderRanking() {
         <span class="rank-badge">${index + 1}</span>
         <span class="rank-main">
           <strong>${escapeHtml(listing.address)}</strong>
-          <small>${escapeHtml(formatMaybeMoney(listing.price))} | ${escapeHtml(formatMaybeMoney(pricePerSqft(listing)))} / sqft | ${escapeHtml(listing.neighbourhood)}</small>
+          <small>${escapeHtml(formatMaybeMoney(listing.price))} | ${escapeHtml(formatMaybeMoney(pricePerSqm(listing)))} / m2 | ${escapeHtml(bedBath(listing))}</small>
         </span>
         <span class="rank-score">${escapeHtml(String(rankingScore))}</span>
       </button>
@@ -812,6 +834,50 @@ function renderRanking() {
   els.rankedList.querySelectorAll(".ranking-row").forEach((row) => {
     row.addEventListener("click", () => selectListing(row.dataset.id, true));
   });
+}
+
+function rankingFilteredListings(selected) {
+  const minBedrooms = els.rankBedroomFilter.value === "all" ? null : Number(els.rankBedroomFilter.value);
+  const minBathrooms = els.rankBathroomFilter.value === "all" ? null : Number(els.rankBathroomFilter.value);
+  const minPsm = toNumber(els.rankMinPsmInput.value);
+  const maxPsm = toNumber(els.rankMaxPsmInput.value);
+
+  return selected.filter((listing) => {
+    const psm = pricePerSqm(listing);
+    return (
+      (!minBedrooms || Number(listing.bedrooms || 0) >= minBedrooms) &&
+      (!minBathrooms || Number(listing.bathrooms || 0) >= minBathrooms) &&
+      (!Number.isFinite(minPsm) || (Number.isFinite(psm) && psm >= minPsm)) &&
+      (!Number.isFinite(maxPsm) || (Number.isFinite(psm) && psm <= maxPsm))
+    );
+  });
+}
+
+function rankingFilterSummary() {
+  const summary = [];
+  if (els.rankBedroomFilter.value !== "all") {
+    summary.push(`${els.rankBedroomFilter.value}+ bed`);
+  }
+  if (els.rankBathroomFilter.value !== "all") {
+    summary.push(`${els.rankBathroomFilter.value}+ bath`);
+  }
+  const minPsm = toNumber(els.rankMinPsmInput.value);
+  const maxPsm = toNumber(els.rankMaxPsmInput.value);
+  if (Number.isFinite(minPsm)) {
+    summary.push(`>= ${compactMoney(minPsm)}/m2`);
+  }
+  if (Number.isFinite(maxPsm)) {
+    summary.push(`<= ${compactMoney(maxPsm)}/m2`);
+  }
+  return summary;
+}
+
+function rankingFilterLabel(selectedCount, filteredCount) {
+  const summary = rankingFilterSummary();
+  if (!summary.length) {
+    return "Tous les biens selectionnes";
+  }
+  return `${filteredCount}/${selectedCount} passent: ${summary.join(" | ")}`;
 }
 
 function rankingScore(listing, universe) {
@@ -1023,6 +1089,11 @@ function pricePerSqft(listing) {
     return Number.POSITIVE_INFINITY;
   }
   return listing.price / listing.sqft;
+}
+
+function pricePerSqm(listing) {
+  const psf = pricePerSqft(listing);
+  return Number.isFinite(psf) ? psf * SQFT_PER_SQM : Number.POSITIVE_INFINITY;
 }
 
 function median(values) {

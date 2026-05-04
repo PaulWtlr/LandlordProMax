@@ -10,7 +10,7 @@ L'app locale couvre Chelsea et South Kensington:
 - pins de prix zoomables jusqu'au bien individuel;
 - filtres prix, quartier, type, tenure, chambres, score;
 - liste de listings, fiche detaillee, comparables, lien source;
-- selection de biens et ranking relatif sur le panier choisi;
+- selection de biens et ranking relatif sur le panier choisi, avec filtres bedrooms, bathrooms et GBP/m2;
 - import CSV/JSON de listings autorises;
 - export CSV des resultats filtres.
 

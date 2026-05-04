@@ -158,6 +158,38 @@
                 <span>Clear</span>
               </button>
             </div>
+            <div class="ranking-filters" aria-label="Filtres ranking">
+              <label class="mini-field">
+                <span>Bedrooms min</span>
+                <select id="rankBedroomFilter">
+                  <option value="all">Toutes</option>
+                  <option value="1">1+</option>
+                  <option value="2">2+</option>
+                  <option value="3">3+</option>
+                  <option value="4">4+</option>
+                  <option value="5">5+</option>
+                </select>
+              </label>
+              <label class="mini-field">
+                <span>Bathrooms min</span>
+                <select id="rankBathroomFilter">
+                  <option value="all">Tous</option>
+                  <option value="1">1+</option>
+                  <option value="2">2+</option>
+                  <option value="3">3+</option>
+                  <option value="4">4+</option>
+                </select>
+              </label>
+              <label class="mini-field">
+                <span>GBP/m2 min</span>
+                <input id="rankMinPsmInput" type="number" min="0" step="500" placeholder="0">
+              </label>
+              <label class="mini-field">
+                <span>GBP/m2 max</span>
+                <input id="rankMaxPsmInput" type="number" min="0" step="500" placeholder="25000">
+              </label>
+            </div>
+            <div id="rankingFilterLabel" class="ranking-filter-label">Tous les biens selectionnes</div>
             <div id="rankedList" class="ranking-list"></div>
           </div>
 

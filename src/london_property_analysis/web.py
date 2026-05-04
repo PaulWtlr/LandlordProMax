@@ -5,9 +5,18 @@ import json
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+try:
+    from .listings import fetch_foxtons_prime, write_csv, write_js, write_json
+except ImportError:  # Allows `python src/london_property_analysis/web.py`.
+    import sys
+
+    sys.path.insert(0, str(PROJECT_ROOT / "src"))
+    from london_property_analysis.listings import fetch_foxtons_prime, write_csv, write_js, write_json
 
 
 class PropertyAppHandler(SimpleHTTPRequestHandler):
@@ -15,14 +24,42 @@ class PropertyAppHandler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=directory or str(PROJECT_ROOT), **kwargs)
 
     def do_GET(self) -> None:
-        if self.path in {"/", ""}:
+        parsed = urlparse(self.path)
+        if parsed.path in {"/", ""}:
             self.path = "/app/index.html"
-        if self.path == "/healthz":
+        if parsed.path == "/healthz":
             self._write_json({"status": "ok", "app": "london-property-analysis"})
+            return
+        if parsed.path == "/api/listings":
+            params = parse_qs(parsed.query)
+            refresh = params.get("refresh", ["0"])[0] in {"1", "true", "yes"}
+            self._write_dataset(refresh=refresh)
             return
         super().do_GET()
 
-    def _write_json(self, payload: dict[str, str]) -> None:
+    def _write_dataset(self, refresh: bool = False) -> None:
+        path = PROJECT_ROOT / "data" / "live_properties.json"
+        if refresh or not path.exists():
+            rows = fetch_foxtons_prime(limit=1000)
+            write_csv(rows, str(PROJECT_ROOT / "data" / "processed" / "chelsea-south-kensington-listings.csv"))
+            write_json(
+                rows,
+                str(path),
+                {
+                    "mode": "chelsea_south_kensington",
+                    "requestedLimit": 1000,
+                    "areas": ["Chelsea", "South Kensington"],
+                    "refresh": refresh,
+                },
+            )
+            write_js(rows, str(PROJECT_ROOT / "data" / "live_properties.js"))
+        if path.exists():
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        else:
+            payload = {"meta": {"count": 0, "source": "none"}, "listings": []}
+        self._write_json(payload)
+
+    def _write_json(self, payload: dict[str, object]) -> None:
         body = json.dumps(payload).encode("utf-8")
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "application/json; charset=utf-8")

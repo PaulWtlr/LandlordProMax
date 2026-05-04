@@ -4,10 +4,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Chelsea & South Kensington Property Map</title>
+    <link rel="icon" href="data:,">
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIINfQhxxE/lb3WzG03L0lxX4Yp3a4f08H4="
       crossorigin=""
     >
     <link rel="stylesheet" href="./styles.css">
@@ -19,7 +19,7 @@
           <div class="brand-mark">LPA</div>
           <div>
             <h1>Chelsea & South Kensington</h1>
-            <p id="datasetLabel">Demo synthetique</p>
+            <p id="datasetLabel">Chargement des annonces</p>
           </div>
         </div>
 
@@ -33,9 +33,9 @@
             <i data-lucide="download"></i>
             <span>Export</span>
           </button>
-          <button class="icon-button primary" id="resetButton" type="button" aria-label="Reinitialiser">
-            <i data-lucide="rotate-ccw"></i>
-            <span>Reset</span>
+          <button class="icon-button primary" id="resetButton" type="button" aria-label="Rafraichir">
+            <i data-lucide="refresh-cw"></i>
+            <span>Refresh</span>
           </button>
         </div>
       </header>
@@ -50,9 +50,7 @@
             <label class="field">
               <span>Quartier</span>
               <select id="areaFilter">
-                <option value="all">Chelsea + South Kensington</option>
-                <option value="Chelsea">Chelsea</option>
-                <option value="South Kensington">South Kensington</option>
+                <option value="all">Tout Londres</option>
               </select>
             </label>
             <label class="field">
@@ -160,12 +158,11 @@
 
     <script
       src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
     <script src="../data/sample_properties.js"></script>
+    <script src="../data/live_properties.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>
-

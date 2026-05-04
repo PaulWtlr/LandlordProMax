@@ -1,7 +1,6 @@
-const TARGET_AREAS = new Set(["Chelsea", "South Kensington"]);
 const TARGET_BOUNDS = [
-  [51.4768, -0.2065],
-  [51.5065, -0.1512],
+  [51.28, -0.55],
+  [51.70, 0.35],
 ];
 const DATE_FORMAT = new Intl.DateTimeFormat("en-GB", {
   day: "2-digit",
@@ -54,10 +53,12 @@ const els = {
   toast: document.querySelector("#toast"),
 };
 
-function init() {
-  state.all = loadInitialListings();
-  state.selectedId = state.all[0]?.id ?? null;
+async function init() {
   initMap();
+  const loaded = await loadListings(false);
+  state.all = loaded.rows;
+  state.datasetName = loaded.label;
+  state.selectedId = state.all[0]?.id ?? null;
   populateDynamicOptions();
   wireEvents();
   applyFilters();
@@ -66,11 +67,51 @@ function init() {
   }
 }
 
-function loadInitialListings() {
-  return (window.SAMPLE_PROPERTIES || [])
+async function loadListings(refresh = false) {
+  try {
+    const response = await fetch(`/api/listings${refresh ? "?refresh=1" : ""}`, { cache: "no-store" });
+    if (response.ok) {
+      const payload = await response.json();
+      const rows = normaliseRows(payload.listings || []);
+      if (rows.length) {
+        return {
+          rows,
+          label: datasetLabel(payload.meta, rows.length),
+        };
+      }
+    }
+  } catch (error) {
+    console.info("Local listings API unavailable, falling back to static data.", error);
+  }
+
+  const source = window.LIVE_PROPERTIES?.length ? window.LIVE_PROPERTIES : window.SAMPLE_PROPERTIES || [];
+  const rows = normaliseRows(source);
+  return {
+    rows,
+    label: window.LIVE_PROPERTIES?.length
+      ? `Foxtons static export | ${rows.length} actifs`
+      : "Demo synthetique",
+  };
+}
+
+function normaliseRows(source) {
+  return source
     .map(normaliseListing)
     .filter(Boolean)
-    .filter(isTargetListing);
+    .filter(isLondonListing);
+}
+
+function datasetLabel(meta, count) {
+  if (!meta) {
+    return `Foxtons live export | ${count} actifs`;
+  }
+  const requested = Number(meta.requestedLimit || 0);
+  const area = meta.mode === "chelsea_south_kensington"
+    ? "Foxtons Chelsea / South Kensington"
+    : "Foxtons Londres";
+  return requested && count < requested
+    ? `${area} | ${count}/${requested} actifs disponibles`
+    : `${area} | ${count} actifs`;
 }
 
 function normaliseListing(raw, index = 0) {
@@ -153,19 +194,16 @@ function parseDate(value) {
 
 function normaliseArea(value) {
   const text = cleanText(value);
-  if (/south\s+ken/i.test(text) || /sw7/i.test(text)) {
+  if (/south\s+ken/i.test(text)) {
     return "South Kensington";
   }
-  if (/chelsea/i.test(text) || /sw3|sw10/i.test(text)) {
+  if (/chelsea/i.test(text)) {
     return "Chelsea";
   }
   return text;
 }
 
-function isTargetListing(listing) {
-  if (TARGET_AREAS.has(listing.neighbourhood)) {
-    return true;
-  }
+function isLondonListing(listing) {
   const inLat = listing.lat >= TARGET_BOUNDS[0][0] && listing.lat <= TARGET_BOUNDS[1][0];
   const inLng = listing.lng >= TARGET_BOUNDS[0][1] && listing.lng <= TARGET_BOUNDS[1][1];
   return inLat && inLng;
@@ -226,6 +264,7 @@ function initFallbackMap() {
 }
 
 function populateDynamicOptions() {
+  populateSelect(els.areaFilter, uniqueValues(state.all, "neighbourhood"), "Tout Londres");
   populateSelect(els.typeFilter, uniqueValues(state.all, "propertyType"), "Tous");
   populateSelect(els.tenureFilter, uniqueValues(state.all, "tenure"), "Tous");
 }
@@ -437,16 +476,33 @@ function renderFallbackMarkers() {
 }
 
 function projectPoint(listing) {
-  const south = TARGET_BOUNDS[0][0];
-  const west = TARGET_BOUNDS[0][1];
-  const north = TARGET_BOUNDS[1][0];
-  const east = TARGET_BOUNDS[1][1];
+  const bounds = boundsForListings(state.filtered.length ? state.filtered : state.all);
+  const south = bounds[0][0];
+  const west = bounds[0][1];
+  const north = bounds[1][0];
+  const east = bounds[1][1];
   const x = ((listing.lng - west) / (east - west)) * 100;
   const y = 100 - ((listing.lat - south) / (north - south)) * 100;
   return {
     x: Math.max(4, Math.min(96, x)),
     y: Math.max(6, Math.min(94, y)),
   };
+}
+
+function boundsForListings(listings) {
+  if (!listings.length) {
+    return TARGET_BOUNDS;
+  }
+  const lats = listings.map((listing) => listing.lat).filter(Number.isFinite);
+  const lngs = listings.map((listing) => listing.lng).filter(Number.isFinite);
+  if (!lats.length || !lngs.length) {
+    return TARGET_BOUNDS;
+  }
+  const padding = 0.012;
+  return [
+    [Math.min(...lats) - padding, Math.min(...lngs) - padding],
+    [Math.max(...lats) + padding, Math.max(...lngs) + padding],
+  ];
 }
 
 function pinTone(listing) {
@@ -676,7 +732,7 @@ function parseCsv(text) {
 
 function replaceListings(rows, datasetName) {
   const normalised = rows.map(normaliseListing).filter(Boolean);
-  const target = normalised.filter(isTargetListing);
+  const target = normalised.filter(isLondonListing);
   const rejected = normalised.length - target.length;
 
   state.all = target;
@@ -688,12 +744,18 @@ function replaceListings(rows, datasetName) {
 }
 
 function resetDemo() {
-  state.all = loadInitialListings();
-  state.datasetName = "Demo synthetique";
-  state.selectedId = state.all[0]?.id ?? null;
-  populateDynamicOptions();
-  applyFilters();
-  showToast("Dataset demo recharge.");
+  els.datasetLabel.textContent = "Refresh Foxtons en cours...";
+  showToast("Collecte Foxtons en cours, quelques secondes.");
+  loadListings(true).then((loaded) => {
+    state.all = loaded.rows;
+    state.datasetName = loaded.label;
+    state.selectedId = state.all[0]?.id ?? null;
+    populateDynamicOptions();
+    applyFilters();
+    showToast("Dataset Foxtons rafraichi.");
+  }).catch((error) => {
+    showToast(`Refresh impossible: ${error.message}`);
+  });
 }
 
 function exportFilteredCsv() {
@@ -729,7 +791,7 @@ function exportFilteredCsv() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "chelsea-south-kensington-listings.csv";
+  link.download = "foxtons-chelsea-south-kensington-listings.csv";
   document.body.appendChild(link);
   link.click();
   link.remove();

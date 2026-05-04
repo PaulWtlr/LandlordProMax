@@ -14,9 +14,10 @@ env/
 
 data/raw/
 data/processed/
+data/live_properties.js
+data/live_properties.json
 exports/
 
 *.log
 .DS_Store
 Thumbs.db
-

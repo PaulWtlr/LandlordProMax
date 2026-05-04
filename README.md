@@ -26,6 +26,19 @@ http://localhost:4173
 
 Format d'import minimal: voir `data/listing_schema.csv`. Les champs essentiels sont `address`, `price`, `lat`, `lng`; les autres champs enrichissent l'analyse.
 
+## Collecte de listings publics Chelsea / South Kensington
+
+Collecter les listings publics Foxtons actuellement exposes sur les pages Chelsea / South Kensington et alimenter l'app:
+
+```powershell
+$env:PYTHONPATH='src'
+& 'C:\Users\paulw\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' -m london_property_analysis listings fetch-foxtons-prime --limit 1000 --out data/processed/chelsea-south-kensington-listings.csv --json-out data/live_properties.json --js-out data/live_properties.js
+```
+
+L'app charge automatiquement `data/live_properties.json` via `/api/listings`. Le bouton **Refresh** appelle `/api/listings?refresh=1` et relance la collecte Foxtons locale.
+
+Cette commande respecte `robots.txt`, utilise un User-Agent explicite et ne contourne pas les protections des portails. Si Foxtons expose moins de 1000 annonces actives dans Chelsea / South Kensington, le dataset contient le nombre reel disponible.
+
 ## Structure du projet
 
 ```text

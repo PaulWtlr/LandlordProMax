@@ -1,3 +1,2 @@
-source,sourceId,address,postcode,neighbourhood,price,bedrooms,bathrooms,sqft,lat,lng,propertyType,tenure,agent,status,url,capturedAt,daysOnMarket,serviceCharge,leaseYears,rentEstimate,grossYield,score,notes
-my_export,ABC-123,"Old Brompton Road, SW7",SW7 3DQ,South Kensington,1285000,2,1,805,51.4937,-0.1816,Flat,Leasehold,Agent Name,for_sale,https://example.com,2026-05-01,29,3600,121,4300,,81,"Optional note"
-
+source,sourceId,address,postcode,neighbourhood,price,bedrooms,bathrooms,sqft,lat,lng,propertyType,tenure,agent,status,url,capturedAt,daysOnMarket,serviceCharge,leaseYears,floorLevel,isLowerGround,rentEstimate,grossYield,score,description,notes
+my_export,ABC-123,"Old Brompton Road, SW7",SW7 3DQ,South Kensington,1285000,2,1,805,51.4937,-0.1816,Flat,Leasehold,Agent Name,for_sale,https://example.com,2026-05-01,29,3600,121,2nd,false,4300,,81,"Second floor flat with lift.","Optional note"

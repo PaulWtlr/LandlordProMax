@@ -74,6 +74,10 @@
                 <input id="maxPriceInput" type="number" min="0" step="50000" placeholder="10000000">
               </label>
             </div>
+            <button class="inline-action" id="targetApartmentsButton" type="button">
+              <i data-lucide="badge-pound-sterling"></i>
+              <span>Flats 850k-1.5m</span>
+            </button>
           </div>
 
           <div class="panel-section">
@@ -103,6 +107,10 @@
                 <option value="all">Tous</option>
               </select>
             </label>
+            <label class="check-field">
+              <input id="excludeLowerGroundInput" type="checkbox">
+              <span>Exclure lower ground</span>
+            </label>
           </div>
 
           <div class="panel-section">
@@ -131,6 +139,13 @@
           <div class="metric-strip" id="metricStrip"></div>
           <div id="map" class="map-canvas">
             <div class="map-placeholder">Carte en chargement</div>
+            <div class="map-tools" aria-label="Outils carte">
+              <button class="map-tool-button" id="boxSelectButton" type="button">
+                <i data-lucide="scan"></i>
+                <span>Box select</span>
+              </button>
+              <span id="boxSelectStatus">Click + drag pour selectionner</span>
+            </div>
           </div>
         </section>
 

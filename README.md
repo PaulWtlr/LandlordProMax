@@ -8,8 +8,9 @@ L'app locale couvre Chelsea et South Kensington:
 
 - carte interactive;
 - pins de prix zoomables jusqu'au bien individuel;
-- filtres prix, quartier, type, tenure, chambres, score;
-- liste de listings, fiche detaillee, comparables, lien source;
+- outil de selection rectangle sur la carte pour remplir le ranking;
+- filtres prix, quartier, type, tenure, chambres, score, exclusion lower ground;
+- liste de listings, fiche detaillee, etage detecte, comparables, lien source;
 - selection de biens et ranking relatif sur le panier choisi, avec filtres bedrooms, bathrooms et GBP/m2;
 - import CSV/JSON de listings autorises;
 - export CSV des resultats filtres.
@@ -30,16 +31,16 @@ Format d'import minimal: voir `data/listing_schema.csv`. Les champs essentiels s
 
 ## Collecte de listings publics Chelsea / South Kensington
 
-Collecter les listings publics Foxtons actuellement exposes sur les pages Chelsea / South Kensington et alimenter l'app:
+Collecter les listings publics Foxtons et Dexters actuellement exposes sur les pages Chelsea / South Kensington et alimenter l'app:
 
 ```powershell
 $env:PYTHONPATH='src'
-& 'C:\Users\paulw\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' -m london_property_analysis listings fetch-foxtons-prime --limit 1000 --out data/processed/chelsea-south-kensington-listings.csv --json-out data/live_properties.json --js-out data/live_properties.js
+& 'C:\Users\paulw\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' -m london_property_analysis listings fetch-prime --limit 1000 --out data/processed/chelsea-south-kensington-listings.csv --json-out data/live_properties.json --js-out data/live_properties.js
 ```
 
-L'app charge automatiquement `data/live_properties.json` via `/api/listings`. Le bouton **Refresh** appelle `/api/listings?refresh=1` et relance la collecte Foxtons locale.
+L'app charge automatiquement `data/live_properties.json` via `/api/listings`. Le bouton **Refresh** appelle `/api/listings?refresh=1` et relance la collecte multi-agences locale. La collecte priorise les flats entre GBP 850k et GBP 1.5m et enrichit les fiches Foxtons avec l'etage quand disponible.
 
-Cette commande respecte `robots.txt`, utilise un User-Agent explicite et ne contourne pas les protections des portails. Si Foxtons expose moins de 1000 annonces actives dans Chelsea / South Kensington, le dataset contient le nombre reel disponible.
+Cette commande respecte `robots.txt`, utilise un User-Agent explicite et ne contourne pas les protections des portails. Si les agences exposent moins de 1000 annonces actives dans Chelsea / South Kensington, le dataset contient le nombre reel disponible.
 
 ## Structure du projet
 

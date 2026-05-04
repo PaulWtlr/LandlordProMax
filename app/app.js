@@ -20,6 +20,9 @@ let markerLayer;
 let boundaryLayer;
 let fallbackPins;
 let markerRefs = new Map();
+let selectionBoxLayer;
+let selectionBoxStart;
+let selectionBoxDrawing = false;
 let toastTimer;
 
 const state = {
@@ -27,6 +30,7 @@ const state = {
   filtered: [],
   selectedId: null,
   selectedIds: new Set(),
+  boxSelectMode: false,
   datasetName: "Demo synthetique",
 };
 
@@ -38,6 +42,7 @@ const els = {
   typeFilter: document.querySelector("#typeFilter"),
   bedroomFilter: document.querySelector("#bedroomFilter"),
   tenureFilter: document.querySelector("#tenureFilter"),
+  excludeLowerGroundInput: document.querySelector("#excludeLowerGroundInput"),
   scoreFilter: document.querySelector("#scoreFilter"),
   sortSelect: document.querySelector("#sortSelect"),
   priceRangeLabel: document.querySelector("#priceRangeLabel"),
@@ -56,8 +61,11 @@ const els = {
   importButton: document.querySelector("#importButton"),
   exportButton: document.querySelector("#exportButton"),
   resetButton: document.querySelector("#resetButton"),
+  targetApartmentsButton: document.querySelector("#targetApartmentsButton"),
   selectVisibleButton: document.querySelector("#selectVisibleButton"),
   clearSelectionButton: document.querySelector("#clearSelectionButton"),
+  boxSelectButton: document.querySelector("#boxSelectButton"),
+  boxSelectStatus: document.querySelector("#boxSelectStatus"),
   rankBedroomFilter: document.querySelector("#rankBedroomFilter"),
   rankBathroomFilter: document.querySelector("#rankBathroomFilter"),
   rankMinPsmInput: document.querySelector("#rankMinPsmInput"),
@@ -118,9 +126,12 @@ function datasetLabel(meta, count) {
     return `Foxtons live export | ${count} actifs`;
   }
   const requested = Number(meta.requestedLimit || 0);
+  const sources = Array.isArray(meta.sources) && meta.sources.length
+    ? meta.sources.join(" + ")
+    : meta.source || "Foxtons";
   const area = meta.mode === "chelsea_south_kensington"
-    ? "Foxtons Chelsea / South Kensington"
-    : "Foxtons Londres";
+    ? `${sources} Chelsea / South Kensington`
+    : `${sources} Londres`;
   return requested && count < requested
     ? `${area} | ${count}/${requested} actifs disponibles`
     : `${area} | ${count} actifs`;
@@ -148,6 +159,9 @@ function normaliseListing(raw, index = 0) {
       : Number.isFinite(rentEstimate) && rentEstimate > 0
         ? (rentEstimate * 12 * 100) / price
         : null;
+  const floorLevel = cleanText(firstDefined(raw.floorLevel, raw.floor_level, raw.entranceFloor, raw.entrance_floor));
+  const description = cleanText(firstDefined(raw.description, raw.descriptionShort, raw.description_short));
+  const notes = cleanText(raw.notes);
 
   return {
     id: `${firstDefined(raw.source, "import")}-${sourceId}`.replace(/\s+/g, "-"),
@@ -173,10 +187,13 @@ function normaliseListing(raw, index = 0) {
     serviceCharge: toNumber(firstDefined(raw.serviceCharge, raw.service_charge)),
     groundRent: toNumber(firstDefined(raw.groundRent, raw.ground_rent)),
     leaseYears: toNumber(firstDefined(raw.leaseYears, raw.lease_years)),
+    floorLevel,
+    isLowerGround: toBoolean(firstDefined(raw.isLowerGround, raw.is_lower_ground)) || isLowerGroundText(floorLevel, notes, description),
     rentEstimate,
     grossYield: computedYield,
     score: clampScore(toNumber(raw.score)),
-    notes: cleanText(raw.notes),
+    description,
+    notes,
   };
 }
 
@@ -194,6 +211,16 @@ function toNumber(value) {
   }
   const parsed = Number(String(value).replace(/[GBP£,\s]/g, ""));
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toBoolean(value) {
+  if (value === true || value === false) {
+    return value;
+  }
+  if (value === undefined || value === null || value === "") {
+    return false;
+  }
+  return /^(1|true|yes|y)$/i.test(String(value).trim());
 }
 
 function parseDate(value) {
@@ -216,6 +243,11 @@ function normaliseArea(value) {
     return "Chelsea";
   }
   return text;
+}
+
+function isLowerGroundText(...values) {
+  const text = values.filter(Boolean).join(" ").toLowerCase();
+  return /lower[-\s]?ground|basement|garden\s+level/.test(text);
 }
 
 function isLondonListing(listing) {
@@ -257,6 +289,7 @@ function initMap() {
   }).addTo(map);
 
   markerLayer = window.L.layerGroup().addTo(map);
+  initBoxSelection();
   setTimeout(() => map.invalidateSize(), 0);
 }
 
@@ -276,6 +309,85 @@ function initFallbackMap() {
     </div>
   `;
   fallbackPins = document.querySelector("#fallbackPins");
+}
+
+function initBoxSelection() {
+  if (!map) {
+    return;
+  }
+  const container = map.getContainer();
+  container.addEventListener("pointerdown", (event) => {
+    if (!state.boxSelectMode) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    selectionBoxDrawing = true;
+    selectionBoxStart = map.mouseEventToLatLng(event);
+    if (selectionBoxLayer) {
+      selectionBoxLayer.remove();
+    }
+    selectionBoxLayer = window.L.rectangle(window.L.latLngBounds(selectionBoxStart, selectionBoxStart), {
+      color: "#006d77",
+      weight: 2,
+      dashArray: "5 4",
+      fillColor: "#006d77",
+      fillOpacity: 0.12,
+    }).addTo(map);
+  });
+
+  window.addEventListener("pointermove", (event) => {
+    if (!state.boxSelectMode || !selectionBoxDrawing || !selectionBoxStart || !selectionBoxLayer) {
+      return;
+    }
+    selectionBoxLayer.setBounds(window.L.latLngBounds(selectionBoxStart, map.mouseEventToLatLng(event)));
+  });
+
+  window.addEventListener("pointerup", (event) => {
+    if (!state.boxSelectMode || !selectionBoxDrawing || !selectionBoxStart || !selectionBoxLayer) {
+      return;
+    }
+    const bounds = window.L.latLngBounds(selectionBoxStart, map.mouseEventToLatLng(event));
+    selectListingsInBounds(bounds);
+    selectionBoxDrawing = false;
+    selectionBoxStart = null;
+    selectionBoxLayer.remove();
+    selectionBoxLayer = null;
+    toggleBoxSelectMode(false);
+  });
+}
+
+function toggleBoxSelectMode(force) {
+  if (!map) {
+    showToast("Selection carte indisponible.");
+    return;
+  }
+  state.boxSelectMode = typeof force === "boolean" ? force : !state.boxSelectMode;
+  els.boxSelectButton.classList.toggle("active", state.boxSelectMode);
+  els.boxSelectStatus.textContent = state.boxSelectMode
+    ? "Trace un rectangle sur la carte"
+    : "Click + drag pour selectionner";
+  map.getContainer().classList.toggle("box-selecting", state.boxSelectMode);
+  if (state.boxSelectMode) {
+    map.dragging.disable();
+    map.doubleClickZoom.disable();
+  } else {
+    map.dragging.enable();
+    map.doubleClickZoom.enable();
+    selectionBoxDrawing = false;
+    selectionBoxStart = null;
+    if (selectionBoxLayer) {
+      selectionBoxLayer.remove();
+      selectionBoxLayer = null;
+    }
+  }
+}
+
+function selectListingsInBounds(bounds) {
+  const matches = state.filtered.filter((listing) => bounds.contains([listing.lat, listing.lng]));
+  matches.forEach((listing) => state.selectedIds.add(listing.id));
+  renderSelectionViews();
+  showToast(`${matches.length} propriete${matches.length > 1 ? "s" : ""} ajoutee${matches.length > 1 ? "s" : ""} au ranking.`);
 }
 
 function populateDynamicOptions() {
@@ -311,6 +423,7 @@ function wireEvents() {
     els.typeFilter,
     els.bedroomFilter,
     els.tenureFilter,
+    els.excludeLowerGroundInput,
     els.scoreFilter,
     els.sortSelect,
   ].forEach((input) => input.addEventListener("input", applyFilters));
@@ -319,8 +432,15 @@ function wireEvents() {
   els.fileInput.addEventListener("change", handleImport);
   els.exportButton.addEventListener("click", exportFilteredCsv);
   els.resetButton.addEventListener("click", resetDemo);
+  els.targetApartmentsButton.addEventListener("click", applyTargetApartmentFilter);
   els.selectVisibleButton.addEventListener("click", selectVisibleListings);
   els.clearSelectionButton.addEventListener("click", clearSelection);
+  els.boxSelectButton.addEventListener("click", toggleBoxSelectMode);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && state.boxSelectMode) {
+      toggleBoxSelectMode(false);
+    }
+  });
   [
     els.rankBedroomFilter,
     els.rankBathroomFilter,
@@ -338,9 +458,10 @@ function applyFilters() {
   const minBedrooms = els.bedroomFilter.value === "all" ? null : Number(els.bedroomFilter.value);
   const tenure = els.tenureFilter.value;
   const minScore = Number(els.scoreFilter.value);
+  const excludeLowerGround = els.excludeLowerGroundInput.checked;
 
   state.filtered = state.all.filter((listing) => {
-    const haystack = [listing.address, listing.postcode, listing.agent, listing.source, listing.propertyType]
+    const haystack = [listing.address, listing.postcode, listing.agent, listing.source, listing.propertyType, listing.floorLevel, listing.description]
       .join(" ")
       .toLowerCase();
 
@@ -352,6 +473,7 @@ function applyFilters() {
       (type === "all" || listing.propertyType === type) &&
       (!minBedrooms || Number(listing.bedrooms || 0) >= minBedrooms) &&
       (tenure === "all" || listing.tenure === tenure) &&
+      (!excludeLowerGround || !listing.isLowerGround) &&
       Number(listing.score || 0) >= minScore
     );
   });
@@ -460,15 +582,12 @@ function renderMarkers(fitMap = true) {
       title: listing.address,
     });
 
-    marker.on("click", () => {
-      selectListing(listing.id, false);
-      marker.openPopup();
-    });
+    marker.on("click", () => selectListing(listing.id, true));
     marker.bindPopup(`
       <div class="popup-card">
         <strong>${escapeHtml(listing.address)}</strong>
         <span>${escapeHtml(formatMaybeMoney(listing.price))} | ${escapeHtml(bedBath(listing))}</span>
-        <span>${escapeHtml(listing.neighbourhood)} | ${escapeHtml(listing.propertyType || "-")}</span>
+        <span>${escapeHtml(listing.neighbourhood)} | ${escapeHtml(listing.propertyType || "-")} | ${escapeHtml(floorLabel(listing))}</span>
         <span>${escapeHtml(formatMaybeMoney(pricePerSqft(listing)))} / sqft | score ${escapeHtml(String(listing.score ?? "-"))}</span>
         <div class="popup-actions">
           <a href="${escapeAttribute(listing.url || "#")}" target="_blank" rel="noreferrer">Source</a>
@@ -553,7 +672,7 @@ function renderFallbackMarkers() {
     .join("");
 
   fallbackPins.querySelectorAll(".fallback-pin").forEach((pin) => {
-    pin.addEventListener("click", () => selectListing(pin.dataset.id, false));
+    pin.addEventListener("click", () => selectListing(pin.dataset.id, true));
   });
 }
 
@@ -614,7 +733,7 @@ function renderList() {
         <article class="listing-card${active}${selected ? " selected" : ""}" data-id="${escapeAttribute(listing.id)}" role="button" tabindex="0">
           <div class="listing-main">
             <div class="listing-address">${escapeHtml(listing.address)}</div>
-            <div class="listing-subline">${escapeHtml(listing.neighbourhood)} | ${escapeHtml(bedBath(listing))} | ${escapeHtml(listing.propertyType || "-")}</div>
+            <div class="listing-subline">${escapeHtml(listing.neighbourhood)} | ${escapeHtml(bedBath(listing))} | ${escapeHtml(listing.propertyType || "-")} | ${escapeHtml(floorLabel(listing))}</div>
             <div class="listing-numbers">
               <span>${escapeHtml(formatMaybeMoney(listing.price))}</span>
               <span>${escapeHtml(formatMaybeMoney(pricePerSqft(listing)))} / sqft</span>
@@ -675,11 +794,13 @@ function renderDetails() {
       <span class="badge">${escapeHtml(selected.postcode || "-")}</span>
       <span class="badge">${escapeHtml(bedBath(selected))}</span>
       <span class="badge">${escapeHtml(selected.tenure || "-")}</span>
+      <span class="badge ${selected.isLowerGround ? "risk" : ""}">${escapeHtml(floorLabel(selected))}</span>
     </div>
     <div class="fact-grid">
       ${fact("GBP/sqft", `${formatMaybeMoney(pricePerSqft(selected))}`)}
       ${fact("GBP/m2", `${formatMaybeMoney(pricePerSqm(selected))}`)}
       ${fact("Surface", `${formatMaybeNumber(selected.sqft)} sqft`)}
+      ${fact("Etage", floorLabel(selected))}
       ${fact("Yield brut", formatPercent(selected.grossYield))}
       ${fact("Jours marche", formatMaybeNumber(selected.daysOnMarket))}
       ${fact("Service charge", formatMaybeMoney(selected.serviceCharge))}
@@ -695,7 +816,7 @@ function renderDetails() {
         ${inRanking ? "Retirer du ranking" : "Ajouter au ranking"}
       </button>
     </div>
-    <p class="notes">${escapeHtml(selected.notes || `${selected.agent || "Agent inconnu"} | capture ${sourceDate}`)}</p>
+    <p class="notes">${escapeHtml(selected.description || selected.notes || `${selected.agent || "Agent inconnu"} | capture ${sourceDate}`)}</p>
     <div class="comparable-list">
       ${comparables.map(renderComparable).join("")}
     </div>
@@ -748,10 +869,16 @@ function selectListing(id, recenter = false) {
   renderList();
   renderDetails();
   renderRanking();
+  scrollSelectionIntoView();
   if (recenter && selected && map) {
     map.setView([selected.lat, selected.lng], Math.max(map.getZoom(), 18), { animate: true });
     window.setTimeout(() => markerRefs.get(id)?.openPopup(), 180);
   }
+}
+
+function scrollSelectionIntoView() {
+  document.querySelector(".details-section")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  document.querySelector(".listing-card.active")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
 function toggleListingSelection(id) {
@@ -776,6 +903,16 @@ function clearSelection() {
   state.selectedIds.clear();
   renderSelectionViews();
   showToast("Selection ranking videe.");
+}
+
+function applyTargetApartmentFilter() {
+  els.minPriceInput.value = "850000";
+  els.maxPriceInput.value = "1500000";
+  if ([...els.typeFilter.options].some((option) => option.value.toLowerCase() === "flat")) {
+    els.typeFilter.value = [...els.typeFilter.options].find((option) => option.value.toLowerCase() === "flat").value;
+  }
+  applyFilters();
+  showToast("Filtre applique: flats entre GBP 850k et GBP 1.5m.");
 }
 
 function renderSelectionViews() {
@@ -1054,9 +1191,12 @@ function exportFilteredCsv() {
     "daysOnMarket",
     "serviceCharge",
     "leaseYears",
+    "floorLevel",
+    "isLowerGround",
     "rentEstimate",
     "grossYield",
     "score",
+    "description",
     "notes",
   ];
   const rows = [headers, ...state.filtered.map((listing) => headers.map((header) => serialiseCsvValue(listing[header])))];
@@ -1082,6 +1222,13 @@ function bedBath(listing) {
   const beds = Number.isFinite(listing.bedrooms) ? `${listing.bedrooms} bed` : "- bed";
   const baths = Number.isFinite(listing.bathrooms) ? `${listing.bathrooms} bath` : "- bath";
   return `${beds} | ${baths}`;
+}
+
+function floorLabel(listing) {
+  if (listing.floorLevel) {
+    return listing.isLowerGround ? `${listing.floorLevel} (lower)` : listing.floorLevel;
+  }
+  return listing.isLowerGround ? "Lower ground" : "Etage n/d";
 }
 
 function pricePerSqft(listing) {

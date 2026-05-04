@@ -236,6 +236,44 @@ h1 {
   gap: 10px;
 }
 
+.inline-action {
+  width: 100%;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 7px 9px;
+  background: #fff;
+  color: var(--ink);
+  font-weight: 750;
+}
+
+.inline-action svg {
+  width: 15px;
+  height: 15px;
+}
+
+.check-field {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.check-field input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--teal);
+}
+
 .slider-field input {
   padding: 0;
   accent-color: var(--teal);
@@ -288,6 +326,55 @@ h1 {
   min-height: 420px;
   position: relative;
   background: #e9e1d4;
+}
+
+.map-tools {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 520;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid rgba(187, 182, 170, 0.8);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 10px 22px rgba(32, 35, 33, 0.12);
+}
+
+.map-tool-button {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--teal);
+  border-radius: var(--radius);
+  padding: 6px 9px;
+  background: #fff;
+  color: var(--teal);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.map-tool-button.active {
+  background: var(--teal);
+  color: #fff;
+}
+
+.map-tool-button svg {
+  width: 15px;
+  height: 15px;
+}
+
+#boxSelectStatus {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.box-selecting {
+  cursor: crosshair;
 }
 
 .map-placeholder {
@@ -551,6 +638,12 @@ h1 {
   border-color: rgba(201, 138, 18, 0.3);
   color: #8b5b00;
   background: rgba(201, 138, 18, 0.1);
+}
+
+.badge.risk {
+  border-color: rgba(182, 66, 66, 0.32);
+  color: var(--red);
+  background: rgba(182, 66, 66, 0.08);
 }
 
 .detail-price {
@@ -1008,6 +1101,16 @@ h1 {
 
   .metric-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .map-tools {
+    right: 12px;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  #boxSelectStatus {
+    white-space: normal;
   }
 
   .insight-panel {

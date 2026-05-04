@@ -1,6 +1,6 @@
 import argparse
 
-from .listings import add_listings_parser, fetch_foxtons_command, fetch_foxtons_prime_command
+from .listings import add_listings_parser, fetch_foxtons_command, fetch_foxtons_prime_command, fetch_prime_command
 from .ppd import fetch_year, filter_london, summarize
 from .web import add_serve_parser, serve
 
@@ -41,6 +41,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.domain == "listings" and args.command == "fetch-foxtons-prime":
         fetch_foxtons_prime_command(args)
+        return 0
+
+    if args.domain == "listings" and args.command == "fetch-prime":
+        fetch_prime_command(args)
         return 0
 
     if args.domain == "ppd" and args.command == "fetch-year":

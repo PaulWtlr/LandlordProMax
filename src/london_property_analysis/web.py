@@ -11,12 +11,12 @@ from urllib.parse import parse_qs, urlparse
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 try:
-    from .listings import fetch_foxtons_prime, write_csv, write_js, write_json
+    from .listings import fetch_prime_listings, write_csv, write_js, write_json
 except ImportError:  # Allows `python src/london_property_analysis/web.py`.
     import sys
 
     sys.path.insert(0, str(PROJECT_ROOT / "src"))
-    from london_property_analysis.listings import fetch_foxtons_prime, write_csv, write_js, write_json
+    from london_property_analysis.listings import fetch_prime_listings, write_csv, write_js, write_json
 
 
 class PropertyAppHandler(SimpleHTTPRequestHandler):
@@ -43,7 +43,7 @@ class PropertyAppHandler(SimpleHTTPRequestHandler):
     def _write_dataset(self, refresh: bool = False) -> None:
         path = PROJECT_ROOT / "data" / "live_properties.json"
         if refresh or not path.exists():
-            rows = fetch_foxtons_prime(limit=1000)
+            rows = fetch_prime_listings(limit=1000)
             write_csv(rows, str(PROJECT_ROOT / "data" / "processed" / "chelsea-south-kensington-listings.csv"))
             write_json(
                 rows,
@@ -52,6 +52,10 @@ class PropertyAppHandler(SimpleHTTPRequestHandler):
                     "mode": "chelsea_south_kensington",
                     "requestedLimit": 1000,
                     "areas": ["Chelsea", "South Kensington"],
+                    "source": "multi_agency",
+                    "sources": ["Foxtons", "Dexters"],
+                    "targetPriceMin": 850000,
+                    "targetPriceMax": 1500000,
                     "refresh": refresh,
                 },
             )

@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Chelsea & South Kensington Property Map</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIINfQhxxE/lb3WzG03L0lxX4Yp3a4f08H4="
+      crossorigin=""
+    >
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <div class="brand-mark">LPA</div>
+          <div>
+            <h1>Chelsea & South Kensington</h1>
+            <p id="datasetLabel">Demo synthetique</p>
+          </div>
+        </div>
+
+        <div class="topbar-actions">
+          <input id="fileInput" type="file" accept=".csv,.json,application/json,text/csv">
+          <button class="icon-button ghost" id="importButton" type="button" aria-label="Importer">
+            <i data-lucide="upload"></i>
+            <span>Import</span>
+          </button>
+          <button class="icon-button ghost" id="exportButton" type="button" aria-label="Exporter">
+            <i data-lucide="download"></i>
+            <span>Export</span>
+          </button>
+          <button class="icon-button primary" id="resetButton" type="button" aria-label="Reinitialiser">
+            <i data-lucide="rotate-ccw"></i>
+            <span>Reset</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <aside class="filter-panel" aria-label="Filtres">
+          <div class="panel-section">
+            <div class="section-heading">
+              <h2>Univers</h2>
+              <span id="targetCount">0 actifs</span>
+            </div>
+            <label class="field">
+              <span>Quartier</span>
+              <select id="areaFilter">
+                <option value="all">Chelsea + South Kensington</option>
+                <option value="Chelsea">Chelsea</option>
+                <option value="South Kensington">South Kensington</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Recherche</span>
+              <input id="searchInput" type="search" placeholder="Rue, agent, postcode">
+            </label>
+          </div>
+
+          <div class="panel-section">
+            <div class="section-heading">
+              <h2>Prix</h2>
+              <span id="priceRangeLabel">Tout</span>
+            </div>
+            <div class="split-fields">
+              <label class="field">
+                <span>Min GBP</span>
+                <input id="minPriceInput" type="number" min="0" step="50000" placeholder="0">
+              </label>
+              <label class="field">
+                <span>Max GBP</span>
+                <input id="maxPriceInput" type="number" min="0" step="50000" placeholder="10000000">
+              </label>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <div class="section-heading">
+              <h2>Caracteristiques</h2>
+            </div>
+            <label class="field">
+              <span>Type</span>
+              <select id="typeFilter">
+                <option value="all">Tous</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Chambres min</span>
+              <select id="bedroomFilter">
+                <option value="all">Toutes</option>
+                <option value="1">1+</option>
+                <option value="2">2+</option>
+                <option value="3">3+</option>
+                <option value="4">4+</option>
+                <option value="5">5+</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Tenure</span>
+              <select id="tenureFilter">
+                <option value="all">Tous</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="panel-section">
+            <div class="section-heading">
+              <h2>Signal</h2>
+              <span id="scoreLabel">0+</span>
+            </div>
+            <label class="field slider-field">
+              <span>Score min</span>
+              <input id="scoreFilter" type="range" min="0" max="100" value="0">
+            </label>
+            <label class="field">
+              <span>Tri</span>
+              <select id="sortSelect">
+                <option value="score_desc">Score decroissant</option>
+                <option value="price_asc">Prix croissant</option>
+                <option value="price_desc">Prix decroissant</option>
+                <option value="psf_asc">GBP/sqft croissant</option>
+                <option value="newest">Capture recente</option>
+              </select>
+            </label>
+          </div>
+        </aside>
+
+        <section class="map-panel" aria-label="Carte">
+          <div class="metric-strip" id="metricStrip"></div>
+          <div id="map" class="map-canvas">
+            <div class="map-placeholder">Carte en chargement</div>
+          </div>
+        </section>
+
+        <aside class="insight-panel" aria-label="Listings">
+          <div class="panel-section details-section">
+            <div class="section-heading">
+              <h2>Selection</h2>
+              <span id="selectionStatus">-</span>
+            </div>
+            <div id="detailPane" class="detail-pane"></div>
+          </div>
+
+          <div class="panel-section list-section">
+            <div class="section-heading">
+              <h2>Listings</h2>
+              <span id="listCount">0</span>
+            </div>
+            <div id="listingList" class="listing-list"></div>
+          </div>
+        </aside>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <script src="../data/sample_properties.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
+
